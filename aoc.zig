@@ -1,6 +1,7 @@
 pub const std = @import("std");
 const io = std.io;
 const fs = std.fs;
+pub const math = std.math;
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -9,6 +10,7 @@ const File = fs.File;
 
 pub const print = io.getStdOut().writer().print;
 pub const debug = std.debug.print;
+pub const assert = std.debug.assert;
 pub const expect = std.testing.expect;
 pub const expectEqual = std.testing.expectEqual;
 pub const expectEqualSlices = std.testing.expectEqualSlices;
@@ -16,14 +18,21 @@ pub const expectEqualSlices = std.testing.expectEqualSlices;
 pub var gpallocator = std.heap.GeneralPurposeAllocator(.{}){};
 pub var gpalloc = &gpallocator.allocator;
 
+pub usingnamespace @import("intcode.zig");
 
-pub fn expectOk(actual: anytype)
-    @typeInfo(@TypeOf(actual)).ErrorUnion.payload
+
+/// This function is intended to be used only in tests.  Prints diagnostic and
+/// aborts if `actual_error_union` is an error.  Replacement for `try` in test
+/// factors without having to return and unwrap errors everywhere.
+pub fn expectOk(actual_error_union: anytype)
+    @typeInfo(@TypeOf(actual_error_union)).ErrorUnion.payload
 {
-    if (actual) |payload| {
+    if (actual_error_union) |payload| {
         return payload;
-    } else |acterr| {
-        std.debug.panic("unexpected error.{}", .{ @errorName(acterr) });
+    } else |actual_error| {
+        std.debug.panic("unexpected error.{}", .{
+            @errorName(actual_error)
+        });
     }
 }
 
@@ -76,6 +85,38 @@ pub const Reader = struct {
             try list.append(try parse1(T, line));
         }
 
+        return list.toOwnedSlice();
+    }
+
+    pub fn readCSVOf(self: *Reader, comptime T: type) ![]T {
+        var buf: [LINE_MAX]u8 = undefined;
+        var reader = self.file.reader();
+        var list = ArrayList(T).init(self.data_alloc);
+        errdefer list.deinit();
+
+        var idx: usize = 0;
+        while (true) {
+            const byte = reader.readByte() catch |err|
+                switch (err) {
+                    error.EndOfStream => break,
+                    else => |e| return e,
+                };
+            if (byte == '\n') break;
+            if (byte == ' ' or byte == '\t') continue;
+            if (byte == ',') {
+                // FIXME any useful empty case?
+                try list.append(try parse1(T, buf[0..idx]));
+                idx = 0;
+            } else if(idx > buf.len) {
+                return error.StreamTooLong;
+            } else {
+                buf[idx] = byte;
+                idx += 1;
+            }
+        }
+
+        if (idx > 0)
+            try list.append(try parse1(T, buf[0..idx]));
         return list.toOwnedSlice();
     }
 };

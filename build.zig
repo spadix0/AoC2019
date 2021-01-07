@@ -7,6 +7,7 @@ pub fn build(b: *std.build.Builder) void {
     regress = b.step("regress", "Run tests for all days");
 
     addexe(b, 1, "fuel");
+    addexe(b, 2, "alarm");
 }
 
 
