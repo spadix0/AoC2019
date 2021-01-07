@@ -8,6 +8,9 @@ pub fn build(b: *std.build.Builder) void {
 
     addexe(b, 1, "fuel");
     addexe(b, 2, "alarm");
+
+    b.step("clean", "Trash the cache")
+        .dependOn(&b.addRemoveDirTree(b.cache_root).step);
 }
 
 
